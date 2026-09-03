@@ -3,6 +3,17 @@
   "version": "0.1.0",
   "description": "Issue-aware pull request review agent for GitHub and Bitbucket",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/benji24290/PRilot.git"
+  },
+  "homepage": "https://github.com/benji24290/PRilot",
+  "bugs": {
+    "url": "https://github.com/benji24290/PRilot/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "keywords": [
     "pull-request",
     "code-review",
