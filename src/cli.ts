@@ -1,6 +1,7 @@
 import { runCopilotReview } from "./agent.ts";
 import { BitbucketClient } from "./bitbucket.ts";
 import { loadConfig, MAX_TOOL_OUTPUT_BYTES, type AppConfig } from "./config.ts";
+import { loadStoredCredentials, runAuth } from "./credentials.ts";
 import type { Finding, IssueContext, PullRequest, PullRequestChange, PullRequestProviderName, VerificationResult } from "./domain.ts";
 import { prepareRepository, type GitRepository } from "./git.ts";
 import { GitHubClient } from "./github.ts";
@@ -25,16 +26,20 @@ export async function main(
   env: Record<string, string | undefined> = process.env,
   argv: string[] = process.argv.slice(2),
 ): Promise<void> {
+  if (argv[0] === "auth") {
+    await runAuth(argv.slice(1));
+    return;
+  }
   const arguments_ = parseArguments(argv);
   if (arguments_.help) {
     console.log(helpText());
     return;
   }
-  const effectiveEnvironment = {
+  const effectiveEnvironment = await loadStoredCredentials({
     ...env,
     ...(arguments_.sourceDirectory ? { SOURCE_DIR: arguments_.sourceDirectory } : {}),
     ...(arguments_.publish ? { PUBLISH: "true" } : {}),
-  };
+  });
   const config = loadConfig(effectiveEnvironment, process.cwd(), arguments_.pullRequestUrl);
   const secrets = [config.pullRequest.token, config.jira?.token, config.copilotToken]
     .filter((value): value is string => Boolean(value));
@@ -219,9 +224,11 @@ function helpText(): string {
 Usage:
   npx prilot <pull-request-url> [--source-dir <path>] [--publish]
   bunx prilot <pull-request-url> [--source-dir <path>] [--publish]
+  prilot auth <status|set|delete> [credential]
 
 Supports GitHub (including Enterprise) and Bitbucket Server/Data Center URLs.
-The review is printed to stdout; comments are posted only with --publish or PUBLISH=true.`;
+The review is printed to stdout; comments are posted only with --publish or PUBLISH=true.
+Local tokens can be stored in the operating system credential manager with prilot auth.`;
 }
 
 function checkTermination(): void {

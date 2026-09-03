@@ -1,6 +1,6 @@
 {
 	"name": "prilot",
-	"version": "0.1.1",
+	"version": "0.2.0",
 	"description": "Issue-aware pull request review agent for GitHub and Bitbucket",
 	"license": "MIT",
 	"repository": {
@@ -44,6 +44,7 @@
 	},
 	"dependencies": {
 		"@github/copilot-sdk": "1.0.7",
+		"@napi-rs/keyring": "2.0.0",
 		"zod": "4.4.3"
 	},
 	"devDependencies": {
