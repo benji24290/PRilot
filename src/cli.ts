@@ -1,8 +1,9 @@
+import { writeFile } from "node:fs/promises";
 import { runCopilotReview } from "./agent.ts";
 import { BitbucketClient } from "./bitbucket.ts";
 import { loadConfig, MAX_TOOL_OUTPUT_BYTES, type AppConfig } from "./config.ts";
 import { loadStoredCredentials, runAuth } from "./credentials.ts";
-import type { Finding, IssueContext, PullRequest, PullRequestChange, PullRequestProviderName, VerificationResult } from "./domain.ts";
+import type { IssueContext, PullRequest, PullRequestChange } from "./domain.ts";
 import { prepareRepository, type GitRepository } from "./git.ts";
 import { GitHubClient } from "./github.ts";
 import { HttpClient } from "./http.ts";
@@ -12,6 +13,13 @@ import { Logger } from "./logger.ts";
 import type { PullRequestProvider } from "./provider.ts";
 import { publishFindings } from "./publisher.ts";
 import { validateFindings } from "./report.ts";
+import {
+  createReviewReport,
+  formatReviewReport,
+  reachesFailureThreshold,
+  type FailureThreshold,
+  type OutputFormat,
+} from "./output.ts";
 
 let logger = new Logger();
 let terminating = false;
@@ -25,15 +33,15 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 export async function main(
   env: Record<string, string | undefined> = process.env,
   argv: string[] = process.argv.slice(2),
-): Promise<void> {
+): Promise<number> {
   if (argv[0] === "auth") {
     await runAuth(argv.slice(1));
-    return;
+    return 0;
   }
   const arguments_ = parseArguments(argv);
   if (arguments_.help) {
     console.log(helpText());
-    return;
+    return 0;
   }
   const effectiveEnvironment = await loadStoredCredentials({
     ...env,
@@ -112,10 +120,20 @@ export async function main(
     pullRequest,
     provider,
   });
-  const status = limitations.length > 0 ? "incomplete" : validated.findings.length > 0 ? "findings" : "clean";
-  printMarkdown(identity.provider, pullRequest, agentResult.submission.summary, limitations, validated.findings, agentResult.verification);
+  const report = createReviewReport({
+    identity,
+    pullRequest,
+    summary: agentResult.submission.summary,
+    limitations,
+    findings: validated.findings,
+    verification: agentResult.verification,
+    publication,
+  });
+  const rendered = `${formatReviewReport(report, arguments_.format)}\n`;
+  if (arguments_.outputPath) await writeFile(arguments_.outputPath, rendered, "utf8");
+  else process.stdout.write(rendered);
   logger.info("review_completed", {
-    status,
+    status: report.status,
     sourceSha: pullRequest.sourceHash,
     findingCount: validated.findings.length,
     publishedCount: publication.publishedCount,
@@ -123,6 +141,7 @@ export async function main(
     failedCount: publication.failedCount,
   });
   if (publication.errors.length > 0) throw new Error(`One or more comments could not be published: ${publication.errors.join("; ")}`);
+  return reachesFailureThreshold(validated.findings, arguments_.failOn) ? 2 : 0;
 }
 
 export function createProvider(config: AppConfig, http: HttpClient): PullRequestProvider {
@@ -166,38 +185,22 @@ async function loadIssues(
   return results.filter((issue): issue is IssueContext => issue !== undefined);
 }
 
-function printMarkdown(
-  provider: PullRequestProviderName,
-  pullRequest: PullRequest,
-  summary: string,
-  limitations: string[],
-  findings: Finding[],
-  verification: VerificationResult[],
-): void {
-  console.log(`\n# PRilot review: ${provider} PR ${pullRequest.id}\n`);
-  console.log(`${summary}\n`);
-  if (limitations.length > 0) {
-    console.log("## Limitations\n");
-    for (const limitation of limitations) console.log(`- ${limitation}`);
-    console.log();
-  }
-  console.log("## Findings\n");
-  if (findings.length === 0) console.log("No actionable findings.\n");
-  for (const finding of findings) {
-    const location = finding.path ? ` — ${finding.path}${finding.line ? `:${finding.line}` : ""}` : "";
-    console.log(`- **${finding.severity.toUpperCase()}** ${finding.title}${location} (${finding.publication.status})`);
-  }
-  if (verification.length > 0) {
-    console.log("\n## Verification\n");
-    for (const result of verification) console.log(`- ${result.id}: exit ${result.exitCode ?? "unknown"}${result.timedOut ? " (timed out)" : ""}`);
-  }
-}
-
-function parseArguments(argv: string[]): { pullRequestUrl?: string; sourceDirectory?: string; publish: boolean; help: boolean } {
+export function parseArguments(argv: string[]): {
+  pullRequestUrl?: string;
+  sourceDirectory?: string;
+  outputPath?: string;
+  publish: boolean;
+  help: boolean;
+  format: OutputFormat;
+  failOn: FailureThreshold;
+} {
   let pullRequestUrl: string | undefined;
   let sourceDirectory: string | undefined;
+  let outputPath: string | undefined;
   let publish = false;
   let help = false;
+  let format: OutputFormat = "markdown";
+  let failOn: FailureThreshold = "never";
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--help" || argument === "-h") help = true;
@@ -206,6 +209,22 @@ function parseArguments(argv: string[]): { pullRequestUrl?: string; sourceDirect
       sourceDirectory = argv[index + 1];
       if (!sourceDirectory) throw new Error("--source-dir requires a path");
       index += 1;
+    } else if (argument === "--output") {
+      outputPath = argv[index + 1];
+      if (!outputPath) throw new Error("--output requires a path");
+      index += 1;
+    } else if (argument === "--format") {
+      const value = argv[index + 1];
+      if (value !== "markdown" && value !== "json") throw new Error("--format must be markdown or json");
+      format = value;
+      index += 1;
+    } else if (argument === "--fail-on") {
+      const value = argv[index + 1];
+      if (value !== "never" && value !== "low" && value !== "medium" && value !== "high" && value !== "critical") {
+        throw new Error("--fail-on must be never, low, medium, high, or critical");
+      }
+      failOn = value;
+      index += 1;
     } else if (argument?.startsWith("-")) throw new Error(`Unknown option: ${argument}`);
     else if (!pullRequestUrl && argument) pullRequestUrl = argument;
     else throw new Error(`Unexpected argument: ${argument}`);
@@ -213,8 +232,11 @@ function parseArguments(argv: string[]): { pullRequestUrl?: string; sourceDirect
   return {
     ...(pullRequestUrl ? { pullRequestUrl } : {}),
     ...(sourceDirectory ? { sourceDirectory } : {}),
+    ...(outputPath ? { outputPath } : {}),
     publish,
     help,
+    format,
+    failOn,
   };
 }
 
@@ -222,9 +244,16 @@ function helpText(): string {
   return `PRilot — issue-aware pull request reviews
 
 Usage:
-  npx prilot <pull-request-url> [--source-dir <path>] [--publish]
-  bunx prilot <pull-request-url> [--source-dir <path>] [--publish]
+  npx prilot <pull-request-url> [options]
+  bunx prilot <pull-request-url> [options]
   prilot auth <status|set|delete> [credential]
+
+Options:
+  --publish                  Post validated findings to the pull request
+  --source-dir <path>        Reuse or create a checkout at this path
+  --format <markdown|json>   Select report format (default: markdown)
+  --output <path>            Write the report to a file instead of stdout
+  --fail-on <severity>       Exit 2 at or above low, medium, high, or critical
 
 Supports GitHub (including Enterprise) and Bitbucket Server/Data Center URLs.
 The review is printed to stdout; comments are posted only with --publish or PUBLISH=true.
@@ -237,7 +266,7 @@ function checkTermination(): void {
 
 export async function run(): Promise<void> {
   try {
-    await main();
+    process.exitCode = await main();
   } catch (error) {
     logger.error("review_failed", error);
     process.exitCode = 1;

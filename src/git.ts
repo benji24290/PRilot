@@ -235,13 +235,74 @@ export function sameRepository(left: string, right: string): boolean {
   const normalizedLeft = normalizeRemote(left);
   const normalizedRight = normalizeRemote(right);
   if (normalizedLeft === normalizedRight) return true;
-  const leftParts = normalizedLeft.split(/[/:]/).filter(Boolean);
-  const rightParts = normalizedRight.split(/[/:]/).filter(Boolean);
-  return leftParts.slice(-2).join("/") === rightParts.slice(-2).join("/");
+
+  const leftIdentity = remoteIdentity(left);
+  const rightIdentity = remoteIdentity(right);
+  if (!leftIdentity || !rightIdentity || leftIdentity.host !== rightIdentity.host) return false;
+  if (leftIdentity.transport === rightIdentity.transport && leftIdentity.port !== rightIdentity.port) return false;
+  return leftIdentity.repositoryPath === rightIdentity.repositoryPath;
 }
 
 function normalizeRemote(value: string): string {
   return value.trim().replaceAll("\\", "/").replace(/\/$/, "").replace(/\.git$/i, "").toLowerCase();
+}
+
+interface RemoteIdentity {
+  host: string;
+  port: string;
+  repositoryPath: string;
+  transport: "http" | "ssh";
+}
+
+function remoteIdentity(value: string): RemoteIdentity | undefined {
+  const trimmed = value.trim();
+  const scp = trimmed.includes("://") ? null : /^(?:[^@/:]+@)?([^/:]+):(.+)$/.exec(trimmed);
+  if (scp?.[1] && scp[2] && !/^[a-zA-Z]:[\\/]/.test(trimmed)) {
+    return {
+      host: scp[1].toLowerCase(),
+      port: "",
+      repositoryPath: normalizeRemotePath(scp[2]),
+      transport: "ssh",
+    };
+  }
+
+  try {
+    const url = new URL(trimmed);
+    if (!["http:", "https:", "ssh:", "git:"].includes(url.protocol) || !url.hostname) return undefined;
+    const transport = url.protocol === "http:" || url.protocol === "https:" ? "http" : "ssh";
+    return {
+      host: url.hostname.toLowerCase(),
+      port: normalizedPort(url.protocol, url.port),
+      repositoryPath: normalizeRemotePath(url.pathname),
+      transport,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeRemotePath(value: string): string {
+  const parts = value.replaceAll("\\", "/").split("/").filter(Boolean);
+  const scmIndex = parts.findIndex((part) => part.toLowerCase() === "scm");
+  const repositoryParts = scmIndex >= 0 ? parts.slice(scmIndex + 1) : parts;
+  return repositoryParts
+    .map((part) => safeDecodeURIComponent(part).toLowerCase())
+    .join("/")
+    .replace(/\.git$/i, "");
+}
+
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function normalizedPort(protocol: string, port: string): string {
+  if (!port) return "";
+  if ((protocol === "http:" && port === "80") || (protocol === "https:" && port === "443") || (protocol === "ssh:" && port === "22")) return "";
+  return port;
 }
 
 export function normalizeRepoPath(path: string): string {

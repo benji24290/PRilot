@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { GitRepository, normalizeRepoPath, prepareRepository, runCommand } from "../src/git.ts";
+import { GitRepository, normalizeRepoPath, prepareRepository, runCommand, sameRepository } from "../src/git.ts";
 import { createGitFixture, type GitFixture } from "./helpers.ts";
 
 let fixture: GitFixture | undefined;
@@ -12,6 +12,35 @@ afterEach(async () => {
   if (temporaryDirectory) await rm(temporaryDirectory, { recursive: true, force: true });
   fixture = undefined;
   temporaryDirectory = undefined;
+});
+
+describe("sameRepository", () => {
+  test("matches HTTPS and SSH forms on the same host", () => {
+    expect(sameRepository("https://github.com/acme/widgets.git", "git@github.com:acme/widgets.git")).toBeTrue();
+    expect(sameRepository("ssh://git@github.com/acme/widgets.git", "https://github.com/acme/widgets")).toBeTrue();
+  });
+
+  test("matches Bitbucket Data Center HTTP and SSH clone paths", () => {
+    expect(sameRepository(
+      "https://code.example.com/bitbucket/scm/TEAM/widgets.git",
+      "ssh://git@code.example.com:7999/TEAM/widgets.git",
+    )).toBeTrue();
+  });
+
+  test("rejects an identical owner and repository on a different host", () => {
+    expect(sameRepository("https://github.com/acme/widgets.git", "https://evil.example/acme/widgets.git")).toBeFalse();
+  });
+
+  test("preserves HTTP context paths and non-default ports", () => {
+    expect(sameRepository(
+      "https://code.example.com/one/acme/widgets.git",
+      "https://code.example.com/two/acme/widgets.git",
+    )).toBeFalse();
+    expect(sameRepository(
+      "https://code.example.com:8443/acme/widgets.git",
+      "https://code.example.com:9443/acme/widgets.git",
+    )).toBeFalse();
+  });
 });
 
 describe("GitRepository", () => {

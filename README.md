@@ -22,6 +22,12 @@ With Bun:
 bunx prilot https://code.example.com/projects/TEAM/repos/widgets/pull-requests/42
 ```
 
+Pipeline-friendly output and severity gating:
+
+```sh
+npx --yes prilot "$PR_URL" --format json --output prilot.json --fail-on high
+```
+
 Manage stored credentials with:
 
 ```sh
@@ -54,6 +60,12 @@ PRilot discovers Jira issues from provider links, `/browse/KEY-123` URLs, and is
 | `PUBLISH` | No | Publish comments when exactly `true` |
 | `VERIFICATION_COMMANDS_JSON` | No | Expose trusted commands to the reviewer |
 
+CLI options override output behavior:
+
+- `--format markdown|json` selects the report format.
+- `--output <path>` writes the report to a file instead of stdout.
+- `--fail-on low|medium|high|critical` exits `2` when a finding reaches the threshold.
+
 Pipeline example:
 
 ```sh
@@ -74,7 +86,7 @@ PRilot reuses a matching checkout, moves a clean checkout to the PR source commi
 
 PR text, Jira content, comments, diffs, and repository files are treated as untrusted input. The review model receives no service credentials or direct network access and has only constrained read and verification tools. Publishing is opt-in and idempotent.
 
-The process exits `0` after a completed review, including reviews with findings. Configuration, authentication, checkout, model-validation, and publication failures exit `1`.
+The process exits `0` after a completed review by default, `2` when `--fail-on` is reached, and `1` for configuration, authentication, checkout, model-validation, or publication failures. Reports use stdout; structured operational logs use stderr.
 
 ## Development
 
@@ -82,6 +94,8 @@ The process exits `0` after a completed review, including reviews with findings.
 bun install --frozen-lockfile
 bun run check
 ```
+
+Publishing is automated from `main`: increasing the stable `package.json` version runs all checks, publishes through npm trusted publishing, and creates the matching tag and GitHub Release. Configure npm's trusted publisher for the `release.yml` workflow before the first release.
 
 ## License
 

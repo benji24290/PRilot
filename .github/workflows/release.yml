@@ -1,0 +1,100 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths: [package.json]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: npm-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.repository == 'benji24290/PRilot'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Detect an increased package version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p 'require("./package.json").version')"
+          node -e 'if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(process.argv[1])) throw new Error("Automatic releases require a stable x.y.z version")' "$version"
+          changed=true
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            before="${{ github.event.before }}"
+            previous="0.0.0"
+            if [[ ! "$before" =~ ^0+$ ]] && git cat-file -e "$before:package.json" 2>/dev/null; then
+              previous="$(git show "$before:package.json" | node -e 'let value=""; process.stdin.on("data", chunk => value += chunk).on("end", () => console.log(JSON.parse(value).version))')"
+            fi
+            if [[ "$version" == "$previous" ]]; then
+              changed=false
+            else
+              node -e 'const parse = value => value.split(".").map(Number); const [next, previous] = process.argv.slice(1).map(parse); const greater = next.some((part, index) => part > previous[index] && next.slice(0, index).every((value, prior) => value === previous[prior])); if (!greater) throw new Error(`package version ${process.argv[1]} must be greater than ${process.argv[2]}`)' "$version" "$previous"
+            fi
+          fi
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Install an OIDC-capable npm CLI
+        if: steps.version.outputs.changed == 'true'
+        run: npm install --global npm@11
+
+      - name: Install dependencies
+        if: steps.version.outputs.changed == 'true'
+        run: bun install --frozen-lockfile
+
+      - name: Check package
+        if: steps.version.outputs.changed == 'true'
+        run: bun run check
+
+      - name: Publish to npm with trusted publishing
+        if: steps.version.outputs.changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ steps.version.outputs.version }}"
+          if npm view "prilot@$version" version >/dev/null 2>&1; then
+            echo "prilot@$version is already published"
+          else
+            npm publish
+          fi
+
+      - name: Create tag and GitHub release
+        if: steps.version.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="v${{ steps.version.outputs.version }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+            git fetch --force origin "refs/tags/$tag:refs/tags/$tag"
+            [[ "$(git rev-list -n 1 "$tag")" == "$GITHUB_SHA" ]] || { echo "$tag already points to another commit" >&2; exit 1; }
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$tag" -m "PRilot $tag"
+            git push origin "$tag"
+          fi
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --generate-notes --title "PRilot $tag"

@@ -2,7 +2,7 @@ export class Logger {
   constructor(readonly secrets: string[] = []) {}
 
   info(event: string, fields: Record<string, unknown> = {}): void {
-    console.log(JSON.stringify({ timestamp: new Date().toISOString(), level: "info", event, ...fields }));
+    console.error(JSON.stringify({ timestamp: new Date().toISOString(), level: "info", event, ...fields }));
   }
 
   warn(event: string, fields: Record<string, unknown> = {}): void {

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import type { PullRequestLocator, VerificationCommand } from "./domain.ts";
+import { sameRepository } from "./git.ts";
 
 export const COPILOT_MODEL = "gpt-5.6-sol";
 export const MAX_TOOL_OUTPUT_BYTES = 200_000;
@@ -153,9 +154,10 @@ function looksLikeMatchingGitCheckout(directory: string, pullRequest: PullReques
   if (!process.env.GIT_DIR && !existsSync(join(directory, ".git"))) return false;
   const result = spawnSync("git", ["-C", directory, "remote", "get-url", "origin"], { encoding: "utf8" });
   if (result.status !== 0) return false;
-  const remote = result.stdout.trim().replace(/\.git$/i, "").toLowerCase();
-  const expectedSuffix = `/${pullRequest.owner}/${pullRequest.repository}`.toLowerCase();
-  return remote.endsWith(expectedSuffix) || remote.endsWith(expectedSuffix.replace(/^\//, ":"));
+  const expected = pullRequest.provider === "bitbucket"
+    ? `${pullRequest.baseUrl}/scm/${encodeURIComponent(pullRequest.owner)}/${encodeURIComponent(pullRequest.repository)}.git`
+    : `${pullRequest.baseUrl}/${encodeURIComponent(pullRequest.owner)}/${encodeURIComponent(pullRequest.repository)}.git`;
+  return sameRepository(result.stdout.trim(), expected);
 }
 
 function normalizeBaseUrl(value: string): string {

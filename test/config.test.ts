@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { loadConfig } from "../src/config.ts";
 
 const valid = {
@@ -72,5 +75,21 @@ describe("loadConfig", () => {
       pullRequestId: 17,
       token: "github-secret",
     });
+  });
+
+  test("reuses only a same-host checkout", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "prilot-config-test-"));
+    try {
+      Bun.spawnSync(["git", "-C", directory, "init", "-q"]);
+      Bun.spawnSync(["git", "-C", directory, "remote", "add", "origin", "https://other.example/acme/widgets.git"]);
+      const { BITBUCKET_TOKEN: _bitbucket, SOURCE_DIR: _source, ...rest } = valid;
+      const env = { ...rest, PR_URL: "https://github.com/acme/widgets/pull/17", GITHUB_TOKEN: "github-secret" };
+      expect(loadConfig(env, directory).sourceDirectory).not.toBe(directory);
+
+      Bun.spawnSync(["git", "-C", directory, "remote", "set-url", "origin", "git@github.com:acme/widgets.git"]);
+      expect(loadConfig(env, directory).sourceDirectory).toBe(directory);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });
