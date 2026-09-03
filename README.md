@@ -1,8 +1,8 @@
-# DiffLynx
+# PRilot
 
-DiffLynx is an open-source, issue-aware pull request review agent. Give it a GitHub or Bitbucket pull request URL and it will fetch the PR, prepare the correct checkout, load linked Jira context when available, inspect the change with an isolated AI agent, and produce a validated review.
+PRilot is an open-source, issue-aware pull request review agent. Give it a GitHub or Bitbucket pull request URL and it will fetch the PR, prepare the correct checkout, load linked Jira context when available, inspect the change with an isolated AI agent, and produce a validated review.
 
-It is dry-run by default. DiffLynx prints its report without changing the pull request unless publishing is explicitly enabled.
+It is dry-run by default. PRilot prints its report without changing the pull request unless publishing is explicitly enabled.
 
 ## What it does
 
@@ -13,7 +13,7 @@ It is dry-run by default. DiffLynx prints its report without changing the pull r
 5. Validates every finding against real changed paths and line anchors.
 6. Prints a Markdown review and optionally posts idempotent inline or general comments.
 
-DiffLynx never approves, merges, declines, commits, pushes, or resolves review threads.
+PRilot never approves, merges, declines, commits, pushes, or resolves review threads.
 
 ## Supported providers
 
@@ -31,7 +31,15 @@ For GitHub:
 ```sh
 GITHUB_TOKEN=github_pat_... \
 COPILOT_GITHUB_TOKEN=github_pat_... \
-npx --yes difflynx https://github.com/acme/widgets/pull/42
+npx --yes prilot https://github.com/acme/widgets/pull/42
+```
+
+The same command with Bun is:
+
+```sh
+GITHUB_TOKEN=github_pat_... \
+COPILOT_GITHUB_TOKEN=github_pat_... \
+bunx prilot https://github.com/acme/widgets/pull/42
 ```
 
 For Bitbucket Server/Data Center:
@@ -39,7 +47,7 @@ For Bitbucket Server/Data Center:
 ```sh
 BITBUCKET_TOKEN=... \
 COPILOT_GITHUB_TOKEN=github_pat_... \
-npx --yes difflynx https://code.example.com/projects/TEAM/repos/widgets/pull-requests/42
+npx --yes prilot https://code.example.com/projects/TEAM/repos/widgets/pull-requests/42
 ```
 
 The URL may instead be supplied through `PR_URL`. Use `--help` for the compact CLI reference.
@@ -48,12 +56,12 @@ The URL may instead be supplied through `PR_URL`. Use `--help` for the compact C
 
 `SOURCE_DIR` or `--source-dir` selects the checkout directory.
 
-- If it is already a Git repository at the PR source commit, DiffLynx uses it as-is.
-- If it is a clean Git repository at another commit, DiffLynx fetches missing PR commits and checks out the source commit in detached-HEAD mode.
-- If it does not exist, DiffLynx clones the provider repository and checks out the source commit.
-- If it contains local changes or is a non-empty, non-Git directory, DiffLynx stops instead of overwriting work.
+- If it is already a Git repository at the PR source commit, PRilot uses it as-is.
+- If it is a clean Git repository at another commit, PRilot fetches missing PR commits and checks out the source commit in detached-HEAD mode.
+- If it does not exist, PRilot clones the provider repository and checks out the source commit.
+- If it contains local changes or is a non-empty, non-Git directory, PRilot stops instead of overwriting work.
 
-When no directory is configured, DiffLynx uses the current directory if its `origin` matches the PR repository; otherwise it creates a provider/PR-specific checkout below the operating system's temporary directory.
+When no directory is configured, PRilot uses the current directory if its `origin` matches the PR repository; otherwise it creates a provider/PR-specific checkout below the operating system's temporary directory.
 
 ## Jira context
 
@@ -62,10 +70,9 @@ Set `JIRA_TOKEN` to load issues linked from the PR. Set `JIRA_BASE_URL` as well 
 ```sh
 JIRA_BASE_URL=https://acme.atlassian.net
 JIRA_TOKEN=...
-JIRA_EMAIL=developer@acme.example
 ```
 
-When `JIRA_EMAIL` is set, DiffLynx uses Basic authentication for Atlassian Cloud API tokens. Without an email it uses Bearer authentication, which is common for Jira Server/Data Center personal access tokens. `JIRA_API_VERSION` accepts `2`, `3`, or `latest` and defaults to `latest`.
+PRilot uses Bearer authentication with Jira Server/Data Center personal access tokens. A dedicated bot account is recommended for pipelines.
 
 Missing Jira configuration or an unavailable linked issue is reported as a review limitation; it does not prevent review of the code.
 
@@ -78,9 +85,7 @@ Missing Jira configuration or an unavailable linked issue is reported as a revie
 | `BITBUCKET_TOKEN` | For Bitbucket PRs | — | Read PR/repository data and optionally publish comments |
 | `COPILOT_GITHUB_TOKEN` | Yes | — | Run the isolated review model |
 | `JIRA_TOKEN` | No | — | Load linked Jira issue details |
-| `JIRA_EMAIL` | No | — | Use Jira Basic authentication with this account email |
 | `JIRA_BASE_URL` | No | — | Resolve bare Jira keys found in PR text or branch names |
-| `JIRA_API_VERSION` | No | `latest` | Jira REST API version (`2`, `3`, or `latest`) |
 | `SOURCE_DIR` | No | Current checkout or temp cache | Repository checkout location |
 | `PUBLISH` | No | `false` | Post review comments only when exactly `true` |
 | `VERIFICATION_COMMANDS_JSON` | No | `[]` | Trusted `{id, argv, timeoutSeconds}` commands available to the reviewer |
@@ -95,7 +100,7 @@ Commands are executed directly without a shell. Token-, secret-, password-, API-
 
 ## Publishing and exit status
 
-Publishing requires `--publish` or the exact environment value `PUBLISH=true`. A hidden DiffLynx fingerprint makes reruns idempotent for the same PR source revision and finding.
+Publishing requires `--publish` or the exact environment value `PUBLISH=true`. A hidden PRilot fingerprint makes reruns idempotent for the same PR source revision and finding.
 
 The process exits `0` when the review completes, including when it finds issues, Jira is unavailable, or a configured verification command fails. It exits `1` for invalid configuration, provider/authentication errors, unsafe checkout state, invalid model output, or comment publication failure.
 

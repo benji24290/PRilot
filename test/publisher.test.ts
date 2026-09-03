@@ -20,7 +20,6 @@ const pullRequest: PullRequest = {
 function finding(fingerprint: string, anchorable: boolean): Finding {
   return {
     severity: "high",
-    category: "correctness",
     title: `Finding ${fingerprint}`,
     body: "A concrete problem that requires a specific correction.",
     path: "src/file.ts",

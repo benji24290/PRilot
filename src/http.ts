@@ -45,10 +45,6 @@ export class HttpClient {
     return parsed.data;
   }
 
-  async text(url: string, init: RequestInit): Promise<string> {
-    return (await this.request(url, init)).text();
-  }
-
   async request(url: string, init: RequestInit): Promise<Response> {
     let lastError: unknown;
     for (let attempt = 0; attempt <= this.#maxRetries; attempt += 1) {

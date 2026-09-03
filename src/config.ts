@@ -28,13 +28,10 @@ const optionalString = (schema: z.ZodString) => z.preprocess(
 
 const environmentSchema = z.object({
   PR_URL: optionalString(z.string().url()),
-  BITBUCKET_PR_URL: optionalString(z.string().url()),
   GITHUB_TOKEN: optionalString(z.string().min(1)),
   BITBUCKET_TOKEN: optionalString(z.string().min(1)),
   JIRA_TOKEN: optionalString(z.string().min(1)),
-  JIRA_EMAIL: optionalString(z.string().email()),
   JIRA_BASE_URL: optionalString(z.string().url()),
-  JIRA_API_VERSION: z.string().regex(/^(?:2|3|latest)$/).default("latest"),
   COPILOT_GITHUB_TOKEN: z.string().min(1),
   PUBLISH: booleanString,
   SOURCE_DIR: optionalString(z.string().min(1)),
@@ -47,9 +44,7 @@ export interface AppConfig {
   };
   jira?: {
     token: string;
-    email?: string;
     baseUrl?: string;
-    apiVersion: string;
   };
   copilotToken: string;
   publish: boolean;
@@ -63,7 +58,7 @@ export function loadConfig(
   pullRequestUrl?: string,
 ): AppConfig {
   const parsed = environmentSchema.parse(env);
-  const requestedUrl = pullRequestUrl ?? parsed.PR_URL ?? parsed.BITBUCKET_PR_URL;
+  const requestedUrl = pullRequestUrl ?? parsed.PR_URL;
   if (!requestedUrl) throw new Error("A pull request URL is required as an argument or through PR_URL");
   const pullRequest = parsePullRequestUrl(requestedUrl);
   const token = pullRequest.provider === "github" ? parsed.GITHUB_TOKEN : parsed.BITBUCKET_TOKEN;
@@ -88,9 +83,7 @@ export function loadConfig(
     ...(parsed.JIRA_TOKEN ? {
       jira: {
         token: parsed.JIRA_TOKEN,
-        ...(parsed.JIRA_EMAIL ? { email: parsed.JIRA_EMAIL } : {}),
         ...(parsed.JIRA_BASE_URL ? { baseUrl: normalizeBaseUrl(parsed.JIRA_BASE_URL) } : {}),
-        apiVersion: parsed.JIRA_API_VERSION,
       },
     } : {}),
     copilotToken: parsed.COPILOT_GITHUB_TOKEN,
@@ -127,7 +120,6 @@ export function parsePullRequestUrl(value: string): PullRequestLocator {
       owner: decodeURIComponent(expectedTail[1] ?? ""),
       repository: decodeURIComponent(expectedTail[3] ?? ""),
       pullRequestId: Number(expectedTail[5]),
-      url: url.toString(),
     };
   }
   const pullIndex = segments.lastIndexOf("pull");
@@ -146,7 +138,6 @@ export function parsePullRequestUrl(value: string): PullRequestLocator {
     owner: decodeURIComponent(segments[pullIndex - 2] ?? ""),
     repository: decodeURIComponent(segments[pullIndex - 1] ?? "").replace(/\.git$/, ""),
     pullRequestId: Number(segments[pullIndex + 1]),
-    url: url.toString(),
   };
 }
 
@@ -155,7 +146,7 @@ function defaultCheckoutDirectory(currentDirectory: string, pullRequest: PullReq
   const slug = [pullRequest.provider, new URL(pullRequest.baseUrl).hostname, pullRequest.owner, pullRequest.repository, pullRequest.pullRequestId]
     .join("-")
     .replace(/[^a-zA-Z0-9._-]+/g, "-");
-  return join(tmpdir(), "difflynx", slug);
+  return join(tmpdir(), "prilot", slug);
 }
 
 function looksLikeMatchingGitCheckout(directory: string, pullRequest: PullRequestLocator): boolean {

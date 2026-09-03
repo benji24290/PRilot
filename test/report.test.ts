@@ -26,9 +26,9 @@ test("validates anchors and rejects unchanged paths and duplicates", async () =>
     summary: "Found concrete issues",
     limitations: [],
     findings: [
-      { severity: "high", category: "correctness", title: "Changed behavior", body: "This changed line breaks the required behavior; restore the guard.", path: "src/file.txt", line: 2 },
-      { severity: "high", category: "correctness", title: "Changed behavior", body: "This changed line breaks the required behavior; restore the guard.", path: "src/file.txt", line: 2 },
-      { severity: "low", category: "tests", title: "Wrong file", body: "This is long enough to pass structural validation.", path: "other.txt" },
+      { severity: "high", title: "Changed behavior", body: "This changed line breaks the required behavior; restore the guard.", path: "src/file.txt", line: 2 },
+      { severity: "high", title: "Changed behavior", body: "This changed line breaks the required behavior; restore the guard.", path: "src/file.txt", line: 2 },
+      { severity: "low", title: "Wrong file", body: "This is long enough to pass structural validation.", path: "other.txt" },
     ],
   }, {
     provider: "github",

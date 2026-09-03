@@ -88,7 +88,7 @@ export function findingFingerprint(context: Omit<FindingValidationContext, "chan
 }
 
 export function fingerprintMarker(fingerprint: string): string {
-  return `<!-- difflynx:${fingerprint} -->`;
+  return `<!-- prilot:${fingerprint} -->`;
 }
 
 function normalizeText(value: string): string {

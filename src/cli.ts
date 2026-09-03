@@ -1,7 +1,7 @@
 import { runCopilotReview } from "./agent.ts";
 import { BitbucketClient } from "./bitbucket.ts";
-import { COPILOT_MODEL, loadConfig, MAX_TOOL_OUTPUT_BYTES, type AppConfig } from "./config.ts";
-import type { IssueContext, PullRequest, PullRequestChange, ReviewReport } from "./domain.ts";
+import { loadConfig, MAX_TOOL_OUTPUT_BYTES, type AppConfig } from "./config.ts";
+import type { Finding, IssueContext, PullRequest, PullRequestChange, PullRequestProviderName, VerificationResult } from "./domain.ts";
 import { prepareRepository, type GitRepository } from "./git.ts";
 import { GitHubClient } from "./github.ts";
 import { HttpClient } from "./http.ts";
@@ -108,50 +108,14 @@ export async function main(
     provider,
   });
   const status = limitations.length > 0 ? "incomplete" : validated.findings.length > 0 ? "findings" : "clean";
-  const report: ReviewReport = {
-    version: 2,
-    generatedAt: new Date().toISOString(),
-    status,
-    pullRequest: {
-      id: pullRequest.id,
-      title: pullRequest.title,
-      provider: identity.provider,
-      host: identity.host,
-      owner: identity.owner,
-      repository: identity.repository,
-      sourceBranch: pullRequest.sourceBranch,
-      sourceHash: pullRequest.sourceHash,
-      targetBranch: pullRequest.targetBranch,
-      targetHash: pullRequest.targetHash,
-    },
-    issues: issues.map((issue) => ({
-      key: issue.key,
-      summary: issue.summary,
-      ...(issue.status ? { status: issue.status } : {}),
-      ...(issue.priority ? { priority: issue.priority } : {}),
-      ...(issue.issueType ? { issueType: issue.issueType } : {}),
-    })),
-    model: COPILOT_MODEL,
-    summary: agentResult.submission.summary,
-    limitations,
-    verification: agentResult.verification,
-    findings: validated.findings,
-    publication: {
-      enabled: config.publish,
-      publishedCount: publication.publishedCount,
-      skippedCount: publication.skippedCount,
-      failedCount: publication.failedCount,
-    },
-  };
-
-  printMarkdown(report);
+  printMarkdown(identity.provider, pullRequest, agentResult.submission.summary, limitations, validated.findings, agentResult.verification);
   logger.info("review_completed", {
-    status: report.status,
+    status,
     sourceSha: pullRequest.sourceHash,
-    findingCount: report.findings.length,
-    publishedCount: report.publication.publishedCount,
-    skippedCount: report.publication.skippedCount,
-    failedCount: report.publication.failedCount,
+    findingCount: validated.findings.length,
+    publishedCount: publication.publishedCount,
+    skippedCount: publication.skippedCount,
+    failedCount: publication.failedCount,
   });
   if (publication.errors.length > 0) throw new Error(`One or more comments could not be published: ${publication.errors.join("; ")}`);
 }
@@ -184,10 +148,7 @@ async function loadIssues(
     limitations.push(`Linked Jira issues ${links.map((link) => link.key).join(", ")} were found, but JIRA_TOKEN is not configured.`);
     return [];
   }
-  const jira = new JiraClient(config.jira.token, http, {
-    ...(config.jira.email ? { email: config.jira.email } : {}),
-    apiVersion: config.jira.apiVersion,
-  });
+  const jira = new JiraClient(config.jira.token, http);
   const results = await Promise.all(links.map(async (link) => {
     try {
       return await jira.getIssue(link);
@@ -200,23 +161,30 @@ async function loadIssues(
   return results.filter((issue): issue is IssueContext => issue !== undefined);
 }
 
-function printMarkdown(report: ReviewReport): void {
-  console.log(`\n# DiffLynx review: ${report.pullRequest.provider} PR ${report.pullRequest.id}\n`);
-  console.log(`${report.summary}\n`);
-  if (report.limitations.length > 0) {
+function printMarkdown(
+  provider: PullRequestProviderName,
+  pullRequest: PullRequest,
+  summary: string,
+  limitations: string[],
+  findings: Finding[],
+  verification: VerificationResult[],
+): void {
+  console.log(`\n# PRilot review: ${provider} PR ${pullRequest.id}\n`);
+  console.log(`${summary}\n`);
+  if (limitations.length > 0) {
     console.log("## Limitations\n");
-    for (const limitation of report.limitations) console.log(`- ${limitation}`);
+    for (const limitation of limitations) console.log(`- ${limitation}`);
     console.log();
   }
   console.log("## Findings\n");
-  if (report.findings.length === 0) console.log("No actionable findings.\n");
-  for (const finding of report.findings) {
+  if (findings.length === 0) console.log("No actionable findings.\n");
+  for (const finding of findings) {
     const location = finding.path ? ` — ${finding.path}${finding.line ? `:${finding.line}` : ""}` : "";
     console.log(`- **${finding.severity.toUpperCase()}** ${finding.title}${location} (${finding.publication.status})`);
   }
-  if (report.verification.length > 0) {
+  if (verification.length > 0) {
     console.log("\n## Verification\n");
-    for (const result of report.verification) console.log(`- ${result.id}: exit ${result.exitCode ?? "unknown"}${result.timedOut ? " (timed out)" : ""}`);
+    for (const result of verification) console.log(`- ${result.id}: exit ${result.exitCode ?? "unknown"}${result.timedOut ? " (timed out)" : ""}`);
   }
 }
 
@@ -246,10 +214,11 @@ function parseArguments(argv: string[]): { pullRequestUrl?: string; sourceDirect
 }
 
 function helpText(): string {
-  return `DiffLynx — issue-aware pull request reviews
+  return `PRilot — issue-aware pull request reviews
 
 Usage:
-  difflynx <pull-request-url> [--source-dir <path>] [--publish]
+  npx prilot <pull-request-url> [--source-dir <path>] [--publish]
+  bunx prilot <pull-request-url> [--source-dir <path>] [--publish]
 
 Supports GitHub (including Enterprise) and Bitbucket Server/Data Center URLs.
 The review is printed to stdout; comments are posted only with --publish or PUBLISH=true.`;

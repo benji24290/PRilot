@@ -23,13 +23,6 @@ export class GitRepository {
     return (await this.#git(["rev-parse", "HEAD"])).stdout.trim();
   }
 
-  async ensureSource(sourceHash: string): Promise<void> {
-    const head = await this.head();
-    if (head !== sourceHash) {
-      throw new Error(`Checkout HEAD ${head} does not match PR source ${sourceHash}`);
-    }
-  }
-
   async prepareCheckout(sourceHash: string, sourceRef: string, targetHash: string, targetRef: string, materialize = false): Promise<void> {
     await this.#ensureCommit(sourceHash, sourceRef, "source");
     await this.#ensureCommit(targetHash, targetRef, "target");
@@ -53,10 +46,6 @@ export class GitRepository {
   async hasCommit(hash: string): Promise<boolean> {
     const result = await this.#git(["cat-file", "-e", `${hash}^{commit}`], true);
     return result.exitCode === 0;
-  }
-
-  async ensureTarget(targetHash: string, targetRef: string): Promise<void> {
-    await this.#ensureCommit(targetHash, targetRef, "target");
   }
 
   async mergeBase(targetHash: string, sourceHash: string): Promise<string> {

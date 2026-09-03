@@ -5,7 +5,6 @@ export type Severity = z.infer<typeof severitySchema>;
 
 export const findingInputSchema = z.object({
   severity: severitySchema,
-  category: z.string().trim().min(1).max(80),
   title: z.string().trim().min(1).max(180),
   body: z.string().trim().min(10).max(4_000),
   path: z.string().trim().min(1).max(1_000).optional(),
@@ -45,7 +44,6 @@ export interface PullRequestLocator {
   owner: string;
   repository: string;
   pullRequestId: number;
-  url: string;
 }
 
 export interface PullRequestIdentity {
@@ -112,35 +110,5 @@ export interface Finding extends FindingInput {
     status: PublicationStatus;
     commentId?: number;
     error?: string;
-  };
-}
-
-export interface ReviewReport {
-  version: 2;
-  generatedAt: string;
-  status: "clean" | "findings" | "incomplete";
-  pullRequest: {
-    id: number;
-    title: string;
-    provider: PullRequestProviderName;
-    host: string;
-    owner: string;
-    repository: string;
-    sourceBranch: string;
-    sourceHash: string;
-    targetBranch: string;
-    targetHash: string;
-  };
-  issues: Array<Pick<IssueContext, "key" | "summary" | "status" | "priority" | "issueType">>;
-  model: string;
-  summary: string;
-  limitations: string[];
-  verification: VerificationResult[];
-  findings: Finding[];
-  publication: {
-    enabled: boolean;
-    publishedCount: number;
-    skippedCount: number;
-    failedCount: number;
   };
 }

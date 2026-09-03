@@ -80,7 +80,7 @@ function formatFinding(finding: Finding): string {
 
 function formatGeneral(findings: Finding[]): string {
   return [
-    "## DiffLynx code review findings",
+    "## PRilot code review findings",
     ...findings.map((finding) => {
       const location = finding.path ? ` (${finding.path}${finding.line ? `:${finding.line}` : ""})` : "";
       return `### [${finding.severity.toUpperCase()}] ${finding.title}${location}\n\n${finding.body}\n\n${fingerprintMarker(finding.fingerprint)}`;

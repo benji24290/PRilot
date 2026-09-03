@@ -46,10 +46,8 @@ const pageSchema = <T extends z.ZodType>(item: T) => z.object({
 
 export interface BitbucketClientOptions {
   baseUrl: string;
-  projectKey?: string;
-  repositorySlug?: string;
-  owner?: string;
-  repository?: string;
+  owner: string;
+  repository: string;
   pullRequestId: number;
   token: string;
   http: HttpClient;
@@ -68,24 +66,21 @@ export class BitbucketClient implements PullRequestProvider {
   readonly #http: HttpClient;
 
   constructor(options: BitbucketClientOptions) {
-    const projectKey = options.projectKey ?? options.owner;
-    const repositorySlug = options.repositorySlug ?? options.repository;
-    if (!projectKey || !repositorySlug) throw new Error("Bitbucket project and repository are required");
     this.#baseUrl = options.baseUrl;
-    this.#projectKey = projectKey;
-    this.#repositorySlug = repositorySlug;
+    this.#projectKey = options.owner;
+    this.#repositorySlug = options.repository;
     this.#pullRequestId = options.pullRequestId;
     this.#headers = { Authorization: `Bearer ${options.token}`, Accept: "application/json" };
     this.#http = options.http;
     this.identity = {
       provider: "bitbucket",
       host: new URL(options.baseUrl).hostname,
-      owner: projectKey,
-      repository: repositorySlug,
+      owner: options.owner,
+      repository: options.repository,
       pullRequestId: options.pullRequestId,
-      url: `${options.baseUrl}/projects/${encodeURIComponent(projectKey)}/repos/${encodeURIComponent(repositorySlug)}/pull-requests/${options.pullRequestId}`,
+      url: `${options.baseUrl}/projects/${encodeURIComponent(options.owner)}/repos/${encodeURIComponent(options.repository)}/pull-requests/${options.pullRequestId}`,
     };
-    this.cloneUrl = `${options.baseUrl}/scm/${encodeURIComponent(projectKey)}/${encodeURIComponent(repositorySlug)}.git`;
+    this.cloneUrl = `${options.baseUrl}/scm/${encodeURIComponent(options.owner)}/${encodeURIComponent(options.repository)}.git`;
     this.sourceFetchRef = `refs/pull-requests/${options.pullRequestId}/from`;
     this.gitAuthorizationHeader = `Bearer ${options.token}`;
   }
@@ -131,12 +126,6 @@ export class BitbucketClient implements PullRequestProvider {
       { headers: this.#headers },
       z.array(linkedIssueSchema),
     );
-  }
-
-  async getRawDiff(): Promise<string> {
-    return this.#http.text(`${this.#prUrl()}/diff?contextLines=5&withComments=false`, {
-      headers: { ...this.#headers, Accept: "text/plain" },
-    });
   }
 
   async postComment(text: string, anchor?: { path: string; line: number; sourceHash: string; targetHash: string }): Promise<number> {

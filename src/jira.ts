@@ -21,17 +21,13 @@ export class JiraClient {
   constructor(
     readonly token: string,
     readonly http: HttpClient,
-    readonly options: { email?: string; apiVersion?: string } = {},
   ) {}
 
   async getIssue(link: LinkedIssue): Promise<IssueContext> {
     const baseUrl = jiraBaseUrl(link);
-    const authorization = this.options.email
-      ? `Basic ${Buffer.from(`${this.options.email}:${this.token}`).toString("base64")}`
-      : `Bearer ${this.token}`;
     const issue = await this.http.json(
-      `${baseUrl}/rest/api/${this.options.apiVersion ?? "latest"}/issue/${encodeURIComponent(link.key)}`,
-      { headers: { Authorization: authorization, Accept: "application/json" } },
+      `${baseUrl}/rest/api/latest/issue/${encodeURIComponent(link.key)}`,
+      { headers: { Authorization: `Bearer ${this.token}`, Accept: "application/json" } },
       issueSchema,
     );
     return {

@@ -39,8 +39,8 @@ describe("BitbucketClient", () => {
     };
     const client = new BitbucketClient({
       baseUrl: "https://code.example.com",
-      projectKey: "PROJ",
-      repositorySlug: "repo",
+      owner: "PROJ",
+      repository: "repo",
       pullRequestId: 12,
       token: "secret",
       http: new HttpClient({ timeoutMs: 1_000, maxRetries: 0, fetch: fakeFetch as unknown as typeof fetch }),

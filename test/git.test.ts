@@ -18,7 +18,6 @@ describe("GitRepository", () => {
   test("reads exact revisions and changed lines without changing the worktree", async () => {
     fixture = await createGitFixture();
     const repository = new GitRepository(fixture.directory, 100_000);
-    await repository.ensureSource(fixture.sourceHash);
     expect(await repository.mergeBase(fixture.baseHash, fixture.sourceHash)).toBe(fixture.baseHash);
     expect(await repository.readFile(fixture.sourceHash, "src/file.txt", 2, 3)).toContain("2: new");
     expect(await repository.addedLines(fixture.baseHash, fixture.sourceHash, "src/file.txt")).toEqual(new Set([2, 3]));
@@ -27,20 +26,25 @@ describe("GitRepository", () => {
     expect(await Bun.file(join(fixture.directory, "untracked.txt")).text()).toBe("preserve me");
   });
 
-  test("rejects a checkout mismatch without changing the worktree", async () => {
+  test("rejects a dirty checkout mismatch without changing the worktree", async () => {
     fixture = await createGitFixture();
     const repository = new GitRepository(fixture.directory, 100_000);
     Bun.spawnSync(["git", "-C", fixture.directory, "checkout", "--detach", fixture.baseHash]);
     await Bun.write(join(fixture.directory, "local.txt"), "preserve me");
 
-    await expect(repository.ensureSource(fixture.sourceHash)).rejects.toThrow("does not match PR source");
+    await expect(repository.prepareCheckout(
+      fixture.sourceHash,
+      "refs/heads/master",
+      fixture.baseHash,
+      "refs/heads/master",
+    )).rejects.toThrow("local changes");
     expect(await repository.head()).toBe(fixture.baseHash);
     expect(await Bun.file(join(fixture.directory, "local.txt")).text()).toBe("preserve me");
   });
 
   test("clones and checks out the pull request source when no checkout exists", async () => {
     fixture = await createGitFixture();
-    temporaryDirectory = await mkdtemp(join(tmpdir(), "difflynx-checkout-test-"));
+    temporaryDirectory = await mkdtemp(join(tmpdir(), "prilot-checkout-test-"));
     const checkout = join(temporaryDirectory, "repository");
     const repository = await prepareRepository({
       directory: checkout,

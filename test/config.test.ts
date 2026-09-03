@@ -28,7 +28,7 @@ describe("loadConfig", () => {
     const { PUBLISH: _publish, SOURCE_DIR: _sourceDirectory, VERIFICATION_COMMANDS_JSON: _commands, ...required } = valid;
     const config = loadConfig(required, "/pipeline/checkout");
     expect(config.publish).toBeFalse();
-    expect(config.sourceDirectory).toContain("difflynx");
+    expect(config.sourceDirectory).toContain("prilot");
     expect(config.verificationCommands).toEqual([]);
   });
 
