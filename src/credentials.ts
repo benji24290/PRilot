@@ -70,13 +70,12 @@ export async function runAuth(
   const store = options.store ?? new SystemCredentialStore();
   const read = options.readSecret ?? readSecret;
   const write = options.write ?? console.log;
-  const [action = "status", requestedName, ...extra] = argv;
+  const [action = "status", requestedName, ...arguments_] = argv;
 
   if (action === "help" || action === "--help" || action === "-h") {
     write(authHelp());
     return;
   }
-  if (extra.length > 0) throw new Error(`Unexpected auth argument: ${extra[0]}`);
 
   if (action === "status") {
     if (requestedName) throw new Error("auth status does not accept a credential name");
@@ -88,17 +87,21 @@ export async function runAuth(
 
   const credential = findCredential(requestedName);
   if (action === "set") {
-    const value = (await read(`${credential.label} token: `)).trim();
+    const [providedValue, ...extra] = arguments_;
+    if (extra.length > 0) throw new Error(`Unexpected auth argument: ${extra[0]}`);
+    const value = (providedValue ?? await read(`${credential.label} token: `)).trim();
     if (!value) throw new Error("Token must not be empty");
     await store.set(credential.environmentVariable, value);
     write(`${credential.name}: stored in the system credential store`);
     return;
   }
   if (action === "delete") {
+    if (arguments_.length > 0) throw new Error(`Unexpected auth argument: ${arguments_[0]}`);
     const deleted = await store.delete(credential.environmentVariable);
     write(`${credential.name}: ${deleted ? "deleted" : "not configured"}`);
     return;
   }
+  if (arguments_.length > 0) throw new Error(`Unexpected auth argument: ${arguments_[0]}`);
   throw new Error(`Unknown auth command: ${action}`);
 }
 
@@ -114,10 +117,11 @@ function authHelp(): string {
 
 Usage:
   prilot auth status
-  prilot auth set <github|bitbucket|jira|copilot>
+  prilot auth set <github|bitbucket|jira|copilot> [token]
   prilot auth delete <github|bitbucket|jira|copilot>
 
 Tokens are stored in macOS Keychain, Windows Credential Manager, or Linux Secret Service.
+When [token] is omitted, PRilot prompts for it with hidden input.
 Environment variables override stored credentials. Set PRILOT_DISABLE_KEYRING=true to disable lookup.`;
 }
 
