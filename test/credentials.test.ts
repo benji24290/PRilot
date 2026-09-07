@@ -55,4 +55,26 @@ describe("local credentials", () => {
     expect(output.join("\n")).toContain("github: configured");
     expect(output.join("\n")).not.toContain("super-secret-token");
   });
+
+  test("sets credentials from an inline token argument without prompting", async () => {
+    const store = new MemoryCredentialStore();
+    const output: string[] = [];
+
+    await runAuth(["set", "copilot", "inline-token"], {
+      store,
+      readSecret: async () => {
+        throw new Error("must not prompt when an inline token is provided");
+      },
+      write: (message: string) => output.push(message),
+    });
+
+    expect(store.values.get("COPILOT_GITHUB_TOKEN")).toBe("inline-token");
+    expect(output).toEqual(["copilot: stored in the system credential store"]);
+  });
+
+  test("rejects extra arguments after an inline token", async () => {
+    await expect(runAuth(["set", "github", "token", "extra"], { store: new MemoryCredentialStore() })).rejects.toThrow(
+      "Unexpected auth argument: extra",
+    );
+  });
 });

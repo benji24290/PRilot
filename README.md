@@ -13,6 +13,7 @@ Store local tokens in macOS Keychain, Windows Credential Manager, or Linux Secre
 ```sh
 npx prilot auth set github     # or: bitbucket
 npx prilot auth set copilot
+npx prilot auth set copilot "$COPILOT_GITHUB_TOKEN"
 npx prilot https://github.com/acme/widgets/pull/42
 ```
 
@@ -32,11 +33,11 @@ Manage stored credentials with:
 
 ```sh
 prilot auth status
-prilot auth set <github|bitbucket|jira|copilot>
+prilot auth set <github|bitbucket|jira|copilot> [token]
 prilot auth delete <github|bitbucket|jira|copilot>
 ```
 
-Token input is hidden and stored values are never printed. Environment variables take precedence, and the keyring is skipped when `CI=true` or `PRILOT_DISABLE_KEYRING=true`.
+Token input is hidden when omitted, stored values are never printed, and an explicit token argument can be used in non-interactive environments. Environment variables take precedence, and the keyring is skipped when `CI=true` or `PRILOT_DISABLE_KEYRING=true`.
 
 ## Supported services
 
