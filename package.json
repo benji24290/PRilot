@@ -1,6 +1,6 @@
 {
 	"name": "prilot",
-	"version": "0.3.0",
+	"version": "0.3.1",
 	"description": "Issue-aware pull request review agent for GitHub and Bitbucket",
 	"license": "MIT",
 	"repository": {
